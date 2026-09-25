@@ -22,6 +22,7 @@ from ultralytics.nn.modules import (
     C2PSA,
     C3,
     C3TR,
+    DepthwiseSeparableConv,
     ELAN1,
     OBB,
     OBB26,
@@ -2067,6 +2068,7 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
+            DepthwiseSeparableConv, 
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -2117,7 +2119,6 @@ def parse_model(d, ch, verbose=True):
                         "adjust width_multiple, nh, or C2fAttn expansion"
                     )
                 args[1] = hidden_channels
-
             args = [c1, c2, *args[1:]]
             if m in repeat_modules:
                 args.insert(2, n)  # number of repeats
