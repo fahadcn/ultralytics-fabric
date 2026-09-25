@@ -22,7 +22,6 @@ from ultralytics.nn.modules import (
     C2PSA,
     C3,
     C3TR,
-    DepthwiseSeparableConv,
     ELAN1,
     OBB,
     OBB26,
@@ -50,6 +49,7 @@ from ultralytics.nn.modules import (
     Conv2,
     ConvTranspose,
     Depth,
+    DepthwiseSeparableConv,
     Detect,
     DWConv,
     DWConvTranspose2d,
@@ -2068,7 +2068,7 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
-            DepthwiseSeparableConv, 
+            DepthwiseSeparableConv,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments

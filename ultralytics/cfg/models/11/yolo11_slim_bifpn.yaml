@@ -28,44 +28,44 @@ head:
   - [6, 1, Conv, [256, 1, 1]] # 12 - P4 lateral (64ch)
   - [4, 1, Conv, [128, 1, 1]] # 13 - P3 lateral (32ch)
   - [2, 1, Conv, [64, 1, 1]] # 14 - P2 lateral (16ch)
-  
+
   # ===== TOP-DOWN PATH =====
   # P5 → P4
   - [11, 1, nn.Upsample, [None, 2, "nearest"]] # 15
   - [[15, 12], 1, Concat, [1]] # 16 (128+64=192ch)
   - [-1, 1, Conv, [256, 1, 1]] # 17 - reduce to 64ch (256*0.25)
   - [-1, 1, DepthwiseSeparableConv, [256, 3, 1]] # 18 - now c1=64, c2=64 ✓
-  
+
   # P4 → P3
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 19
   - [[19, 13], 1, Concat, [1]] # 20 (64+32=96ch)
   - [-1, 1, Conv, [128, 1, 1]] # 21 - reduce to 32ch (128*0.25)
   - [-1, 1, DepthwiseSeparableConv, [128, 3, 1]] # 22 - now c1=32, c2=32 ✓
-  
+
   # P3 → P2
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 23
   - [[23, 14], 1, Concat, [1]] # 24 (32+16=48ch)
   - [-1, 1, Conv, [64, 1, 1]] # 25 - reduce to 16ch (64*0.25)
   - [-1, 1, DepthwiseSeparableConv, [64, 3, 1]] # 26 - now c1=16, c2=16 ✓
-  
+
   # ===== BOTTOM-UP PATH =====
   # P2 → P3
   - [26, 1, Conv, [128, 3, 2]] # 27 (16→32ch)
   - [[27, 22], 1, Concat, [1]] # 28 (32+32=64ch)
   - [-1, 1, Conv, [128, 1, 1]] # 29 - reduce to 32ch
   - [-1, 1, DepthwiseSeparableConv, [128, 3, 1]] # 30 - now c1=32, c2=32 ✓
-  
+
   # P3 → P4
   - [-1, 1, Conv, [256, 3, 2]] # 31 (32→64ch)
   - [[31, 18], 1, Concat, [1]] # 32 (64+64=128ch)
   - [-1, 1, Conv, [256, 1, 1]] # 33 - reduce to 64ch
   - [-1, 1, DepthwiseSeparableConv, [256, 3, 1]] # 34 - now c1=64, c2=64 ✓
-  
+
   # P4 → P5
   - [-1, 1, Conv, [512, 3, 2]] # 35 (64→128ch)
   - [[35, 11], 1, Concat, [1]] # 36 (128+128=256ch)
   - [-1, 1, Conv, [512, 1, 1]] # 37 - reduce to 128ch
   - [-1, 1, DepthwiseSeparableConv, [512, 3, 1]] # 38 - now c1=128, c2=128 ✓
-  
+
   # ===== DETECTION =====
   - [[26, 30, 34, 38], 1, Detect, [nc]] # 39
