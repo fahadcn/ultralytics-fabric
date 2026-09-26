@@ -30,6 +30,7 @@ from ultralytics.nn.modules import (
     SPP,
     SPPELAN,
     SPPF,
+    WTDown,
     A2C2f,
     AConv,
     ADown,
@@ -2070,6 +2071,7 @@ def parse_model(d, ch, verbose=True):
             C2fCIB,
             A2C2f,
             DepthwiseSeparableConv, 
+            WTDown,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments

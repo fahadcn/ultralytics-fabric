@@ -18,6 +18,7 @@ Examples:
 """
 from .bifpn import BiFPNAdd
 from .slim_bifpn import DepthwiseSeparableConv
+from .wavelet import WTDown
 
 from .block import (
     C1,
@@ -194,5 +195,6 @@ __all__ = (
     "YOLOESegment26",
     "v10Detect",
     "BiFPNAdd",
+    "WTDown",
     "DepthwiseSeparableConv",  # <---------- added this line to include DepthwiseSeparableConv
 )
