@@ -33,6 +33,7 @@ from ultralytics.nn.modules import (
     A2C2f,
     AConv,
     ADown,
+    BiFPNAdd,
     Bottleneck,
     BottleneckCSP,
     C2f,
@@ -2147,6 +2148,9 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
+        elif m is BiFPNAdd:
+            c2 = ch[f[0]]
+            args = [len(f)]
         elif m in frozenset(
             {
                 Detect,

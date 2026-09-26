@@ -16,6 +16,7 @@ Examples:
     >>> torch.onnx.export(m, x, f)
     >>> subprocess.run(f"onnxslim {f} {f} && open {f}", shell=True, check=True)  # pip install onnxslim
 """
+from .bifpn import BiFPNAdd
 from .slim_bifpn import DepthwiseSeparableConv
 
 from .block import (
@@ -192,5 +193,6 @@ __all__ = (
     "YOLOESegment",
     "YOLOESegment26",
     "v10Detect",
+    "BiFPNAdd",
     "DepthwiseSeparableConv",  # <---------- added this line to include DepthwiseSeparableConv
 )
