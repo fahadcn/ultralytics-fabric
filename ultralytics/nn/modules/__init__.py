@@ -17,6 +17,7 @@ Examples:
     >>> subprocess.run(f"onnxslim {f} {f} && open {f}", shell=True, check=True)  # pip install onnxslim
 """
 from .bifpn import BiFPNAdd
+from .dsconv import DSConv, SnakeBlock
 from .slim_bifpn import DepthwiseSeparableConv
 from .wavelet import WTDown
 
@@ -196,5 +197,7 @@ __all__ = (
     "v10Detect",
     "BiFPNAdd",
     "WTDown",
+    "DSConv",
+    "SnakeBlock",
     "DepthwiseSeparableConv",  # <---------- added this line to include DepthwiseSeparableConv
 )

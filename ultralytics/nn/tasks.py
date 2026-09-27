@@ -35,6 +35,7 @@ from ultralytics.nn.modules import (
     AConv,
     ADown,
     BiFPNAdd,
+    SnakeBlock,
     Bottleneck,
     BottleneckCSP,
     C2f,
@@ -2072,6 +2073,7 @@ def parse_model(d, ch, verbose=True):
             A2C2f,
             DepthwiseSeparableConv, 
             WTDown,
+            SnakeBlock,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
