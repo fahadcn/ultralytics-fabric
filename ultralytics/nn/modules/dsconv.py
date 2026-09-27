@@ -17,6 +17,7 @@
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 __all__ = ("DSConv", "SnakeBlock")
@@ -114,38 +115,23 @@ def _coordinate_map(offset, k, extend_scope, morph):
 
 
 def _bilinear_sample(feat, y, x, w, h, morph):
-    """Sample feat [B, C, W, H] at float coords y/x ([B, P] flattened)."""
-    device = feat.device
-    b, c = feat.shape[0], feat.shape[1]
-    y = y.reshape(-1).float()
-    x = x.reshape(-1).float()
+    """Sample feat [B, C, W, H] at float coords y/x via F.grid_sample.
 
-    y0 = torch.clamp(torch.floor(y).int(), 0, w - 1)
-    y1 = torch.clamp(y0 + 1, 0, w - 1)
-    x0 = torch.clamp(torch.floor(x).int(), 0, h - 1)
-    x1 = torch.clamp(x0 + 1, 0, h - 1)
+    CUDA-native replacement for the original manual gather (flat[idx] weights):
+    same bilinear math (padding_mode="border" reproduces the old clamp-to-edge),
+    but no index arithmetic (no possible out-of-bounds assert), contiguous output
+    (avoids cuDNN "no engine" failures on the strip conv), and no giant fp32
+    temporaries (fixes the ~9 GiB peak at batch 64 that OOM'd the T4).
 
-    flat = feat.permute(0, 2, 3, 1).reshape(-1, c)  # [B*W*H, C]
-    base = (torch.arange(b, device=device) * (w * h)).reshape(-1, 1).float()
-    base = base.matmul(torch.ones(1, y.numel() // b, device=device)).reshape(-1)
-
-    idx_a0 = (base + y0 * h + x0).long()
-    idx_c0 = (base + y0 * h + x1).long()
-    idx_a1 = (base + y1 * h + x0).long()
-    idx_c1 = (base + y1 * h + x1).long()
-
-    y0f, y1f, x0f, x1f = y0.float(), y1.float(), x0.float(), x1.float()
-    wa0 = ((y1f - y) * (x1f - x)).unsqueeze(-1)
-    wc0 = ((y1f - y) * (x - x0f)).unsqueeze(-1)
-    wa1 = ((y - y0f) * (x1f - x)).unsqueeze(-1)
-    wc1 = ((y - y0f) * (x - x0f)).unsqueeze(-1)
-
-    out = flat[idx_a0] * wa0 + flat[idx_c0] * wc0 + flat[idx_a1] * wa1 + flat[idx_c1] * wc1
-    if morph == 0:
-        out = out.reshape(b, -1, h, c).permute(0, 3, 1, 2)  # [B, C, K*W, H]
-    else:
-        out = out.reshape(b, w, -1, c).permute(0, 3, 1, 2)  # [B, C, W, K*H]
-    return out
+    y indexes the dim of size w, x indexes the dim of size h. morph only selects
+    the point layout: [B, K*W, H] (morph=0) or [B, W, K*H] (morph=1) — the grid
+    is just the stacked coords along a new last dim either way.
+    """
+    # align_corners=False maps pixel index p -> 2(p+0.5)/size - 1
+    gx = (x + 0.5) * (2.0 / h) - 1.0
+    gy = (y + 0.5) * (2.0 / w) - 1.0
+    grid = torch.stack((gx, gy), dim=-1).to(feat.dtype)  # [B, P, Q, 2]
+    return F.grid_sample(feat, grid, mode="bilinear", padding_mode="border", align_corners=False)
 
 
 def _deform(f, offset, k, extend_scope, morph):
