@@ -145,22 +145,28 @@ class SnakeBlock(nn.Module):
 
     Multi-view snake fusion in the spirit of DCFE-YOLO (x-snake, y-snake,
     standard 3x3 branch concatenated and fused by 1x1), but added residually
-    with a learnable gate gamma initialized to 0 — so a pretrained model is
-    preserved exactly at init and the snake path is learned only where it helps.
+    with a learnable gate gamma (init g0) — with g0=0 a pretrained model is
+    preserved exactly at init; g0=0.1 trades a small perturbation for alive
+    branch gradients (S2d showed g0=0 deadlocks the gate under 50ep transfer).
 
     Args:
         c1 (int): Input channels.
         c2 (int): Output channels (must equal c1 for the residual add).
         k (int): Snake kernel chain length.
+        g0 (float): Initial value of the residual gate gamma. 0.0 gives exact
+            identity at init (S2d) but caused a dead gate under the 50ep
+            transfer budget — gamma never moved and the snake path was never
+            learned. 0.1 (S2e) keeps the perturbation small while giving the
+            branch real gradients from step 0.
     """
 
-    def __init__(self, c1, c2, k=9):
+    def __init__(self, c1, c2, k=9, g0=0.0):
         super().__init__()
         self.snake_x = DSConv(c1, c2, k, morph=0)
         self.snake_y = DSConv(c1, c2, k, morph=1)
         self.std = nn.Conv2d(c1, c2, 3, padding=1, bias=False)
         self.fuse = nn.Conv2d(3 * c2, c2, 1, bias=False)
-        self.gamma = nn.Parameter(torch.zeros(1))
+        self.gamma = nn.Parameter(torch.full((1,), float(g0)))
 
     def forward(self, x):
         if self.training and x.requires_grad:
