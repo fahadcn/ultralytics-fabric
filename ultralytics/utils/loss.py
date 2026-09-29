@@ -348,6 +348,18 @@ class v8DetectionLoss:
         m = model.model[-1]  # Detect() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.hyp = h
+
+        # FG-YOLO Stage 3: optional focal-family cls loss (reversible via cls_loss: bce|qfl|vfl).
+        # Motivation: plain BCE treats the mass of easy weave-texture background anchors equally
+        # with hard negatives -> texture false positives. QFL (GFocal, Li et al.) and VFL
+        # (VarifocalNet, Zhang et al.) modulate the cls term so training focuses on hard
+        # negatives and quality-weights positives. Default "bce" = stock behavior, bit-identical.
+        self.cls_loss_type = getattr(h, "cls_loss", "bce")
+        if self.cls_loss_type not in ("bce", "qfl", "vfl"):
+            raise ValueError(f"cls_loss must be one of bce|qfl|vfl, got '{self.cls_loss_type}'")
+        self.qfl_beta = getattr(h, "qfl_beta", 2.0)
+        self.vfl_alpha = getattr(h, "vfl_alpha", 0.75)
+        self.vfl_gamma = getattr(h, "vfl_gamma", 2.0)
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
         self.no = m.nc + m.reg_max * 4
@@ -436,10 +448,26 @@ class v8DetectionLoss:
         target_scores_sum = target_scores.sum().clamp_(min=1)  # on the device: no host sync
 
         # Cls loss with optional class weighting
-        bce_loss = self.bce(pred_scores, target_scores.to(dtype))  # (bs, num_anchors, nc)
+        if self.cls_loss_type == "bce":  # stock path, unchanged
+            bce_loss = self.bce(pred_scores, target_scores.to(dtype))  # (bs, num_anchors, nc)
+        elif self.cls_loss_type == "qfl":
+            # Quality Focal Loss (GFocal): |y - sigmoid|^beta * BCE(logits, y), y = soft quality target
+            with autocast(enabled=False, device=pred_scores.device.type):
+                pred_f, tgt_f = pred_scores.float(), target_scores.float()
+                mod = (tgt_f - pred_f.sigmoid()).abs_().pow_(self.qfl_beta)
+                bce_loss = F.binary_cross_entropy_with_logits(pred_f, tgt_f, reduction="none") * mod
+            bce_loss = bce_loss.to(dtype)
+        else:  # "vfl"
+            # Varifocal Loss: negatives weighted by alpha * sigmoid^gamma, positives by quality target
+            with autocast(enabled=False, device=pred_scores.device.type):
+                pred_f, tgt_f = pred_scores.float(), target_scores.float()
+                label = tgt_f.gt(0).float()  # foreground indicator from soft targets
+                weight = self.vfl_alpha * pred_f.sigmoid().pow_(self.vfl_gamma) * (1 - label) + tgt_f * label
+                bce_loss = F.binary_cross_entropy_with_logits(pred_f, tgt_f, reduction="none") * weight
+            bce_loss = bce_loss.to(dtype)
         if self.class_weights is not None:
             bce_loss *= self.class_weights
-        loss[1] = bce_loss.sum() / target_scores_sum  # BCE
+        loss[1] = bce_loss.sum() / target_scores_sum  # normalization identical for all cls loss types
 
         # Bbox loss: zero on an empty foreground, and pred_distri stays in the graph either way
         loss[0], loss[2] = self.bbox_loss(

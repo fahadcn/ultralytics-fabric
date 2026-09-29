@@ -104,6 +104,10 @@ dis: 6.0 # (float) distillation loss weight
 box: 7.5 # (float) box loss gain
 cls: 0.5 # (float) classification loss gain
 cls_pw: 0.0 # (float) class weights power for handling class imbalance (0.0=disable, 1.0=full inverse frequency)
+cls_loss: bce # (str) FG-YOLO Stage 3: classification loss type — bce (stock) | qfl (Quality Focal) | vfl (Varifocal)
+qfl_beta: 2.0 # (float) QFL modulating exponent beta (GFocal default)
+vfl_alpha: 0.75 # (float) VFL negative balancing factor alpha (VarifocalNet default)
+vfl_gamma: 2.0 # (float) VFL negative focusing exponent gamma (VarifocalNet default)
 dfl: 1.5 # (float) box distance loss gain (DFL when reg_max > 1, L1 on DFL-free YOLO26)
 pose: 12.0 # (float) pose loss gain (pose tasks)
 kobj: 1.0 # (float) keypoint objectness loss gain (pose tasks)
