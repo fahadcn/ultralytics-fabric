@@ -55,18 +55,14 @@ class FcaGate(nn.Module):
             nn.Linear(hidden, c),
             nn.Sigmoid(),
         )
-        self._cache = {}  # (h, w, device, dtype) -> basis [K, H, W]; rebuilt per rank, not in state_dict
 
     def forward(self, x):
         b, c, h, w = x.shape
-        key = (h, w, x.device)
-        basis = self._cache.get(key)
-        if basis is None:
-            basis = _dct_basis(h, w, self.k, x.device, torch.float32)
-            self._cache[key] = basis
-        # dtype-robust by construction: every op follows the fc WEIGHT dtype, no
-        # reliance on autocast behavior — Float-vs-Half crashes are impossible.
         w0 = self.fc[0].weight
-        s = torch.einsum("bchw,khw->bck", x.to(w0.dtype), basis.to(w0.dtype))
+        # Basis rebuilt fresh on x's device every call (microseconds for 16 small
+        # cosine grids). A cached tensor survives neither .to()/deepcopy/EMA —
+        # a stale CPU basis caused "mat2 is on cpu" at final_eval (2026-09-30).
+        basis = _dct_basis(h, w, self.k, x.device, w0.dtype)
+        s = torch.einsum("bchw,khw->bck", x.to(w0.dtype), basis)
         a = self.fc(s.reshape(b, -1)).to(x.dtype).view(b, c, 1, 1)
         return x * a
