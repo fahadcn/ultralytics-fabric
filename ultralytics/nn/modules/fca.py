@@ -64,11 +64,9 @@ class FcaGate(nn.Module):
         if basis is None:
             basis = _dct_basis(h, w, self.k, x.device, torch.float32)
             self._cache[key] = basis
-        # AMP-robust: run the spectral pooling + FC gate in fp32 with autocast
-        # disabled (fp32 stats are also more accurate), then cast the gate back
-        # to x's dtype. Relying on autocast to reconcile .float() inputs with
-        # fp16-cast weights broke on Kaggle's newer torch (Float x Half crash).
-        with torch.amp.autocast(x.device.type, enabled=False):
-            s = torch.einsum("bchw,khw->bck", x.float(), basis)  # multi-spectral pooling [B, C, K]
-            a = self.fc(s.reshape(b, -1)).view(b, c, 1, 1)
-        return x * a.to(x.dtype)
+        # dtype-robust by construction: every op follows the fc WEIGHT dtype, no
+        # reliance on autocast behavior — Float-vs-Half crashes are impossible.
+        w0 = self.fc[0].weight
+        s = torch.einsum("bchw,khw->bck", x.to(w0.dtype), basis.to(w0.dtype))
+        a = self.fc(s.reshape(b, -1)).to(x.dtype).view(b, c, 1, 1)
+        return x * a
