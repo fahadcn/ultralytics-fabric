@@ -36,6 +36,7 @@ from ultralytics.nn.modules import (
     ADown,
     BiFPNAdd,
     SnakeBlock,
+    FcaGate,
     Bottleneck,
     BottleneckCSP,
     C2f,
@@ -2155,6 +2156,9 @@ def parse_model(d, ch, verbose=True):
         elif m is BiFPNAdd:
             c2 = ch[f[0]]
             args = [len(f)]
+        elif m is FcaGate:
+            c2 = ch[f]  # channel-preserving gate; args = [k] (channels taken from input)
+            args = [c2, *args]
         elif m in frozenset(
             {
                 Detect,

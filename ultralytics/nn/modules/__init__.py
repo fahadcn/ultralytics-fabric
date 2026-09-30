@@ -18,6 +18,7 @@ Examples:
 """
 from .bifpn import BiFPNAdd
 from .dsconv import DSConv, SnakeBlock
+from .fca import FcaGate
 from .slim_bifpn import DepthwiseSeparableConv
 from .wavelet import WTDown
 
@@ -199,5 +200,6 @@ __all__ = (
     "WTDown",
     "DSConv",
     "SnakeBlock",
+    "FcaGate",
     "DepthwiseSeparableConv",  # <---------- added this line to include DepthwiseSeparableConv
 )
