@@ -20,7 +20,7 @@ from torch import nn
 __all__ = ("FcaGate",)
 
 
-def _dct_b asis(h, w, k, device, dtype):
+def _dct_basis(h, w, k, device, dtype):
     """K lowest 2D-DCT-II basis functions in (u+v) zigzag order, orthonormalized.
 
     Returns [K, H, W]; basis[0] is the (scaled) DC component == GAP.
