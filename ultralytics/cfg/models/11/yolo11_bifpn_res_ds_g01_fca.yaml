@@ -1,0 +1,70 @@
+# FG-YOLO Stage 6 (MERGE): S2e + S5
+#   S2e skeleton: SnakeBlock(g0=0.1) on backbone P3 (residual dynamic-snake DSConv)
+#   S5 mechanism: FcaGate (multi-spectral DCT channel gate, FcaNet CVPR 2021) on the
+#                 P4/P5 skip laterals, before BiFPNAdd
+# Why merge (measured, Phase-2 150ep, reports/FG-YOLO_phase2_150ep_results.md):
+#   S2e leads mAP50 (.9565), mAP50-95 (.7130), FPPI@.10/.70; S5 leads FPPI@.25 (.150)
+#   and Recall (.919) -> the two mechanisms are metric-complementary.
+# Gate vs S2e: mAP50 >= 0.9565 AND FPPI@0.25 <= 0.160 (ideally ~.150 without mAP loss).
+# Param budget: FcaGate k=8 (not 16) keeps the merge at 3.4254M params = +30.7% vs
+#   baseline 2.62M measured (k=16 would be ~3.59M = +37%). The 8 lowest zigzag
+#   components (DC + lowest frequencies) still cover the weave-energy band. If a
+#   strict <=+30% line is ever required, k=6 gives ~3.384M (+29.2%) at lower
+#   spectral resolution — decide before the paper's params table is frozen.
+# Transfer-safe: SnakeBlock is the only new BACKBONE layer (stock 0-4 keep indices,
+#   stock >=5 shift +1); skip laterals + gates + BiFPNAdds were random-init in S1b too.
+#   Stock Detect 23 -> 30. See train_fg_stage6_merge.py for the bake remap.
+
+# Parameters
+nc: 80 # number of classes (overridden by data.yaml at train time)
+scales: # model compound scaling constants
+  # [depth, width, max_channels]
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+# YOLO11 backbone + SnakeBlock on P3 (S2e, unchanged)
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [-1, 2, C3k2, [256, False, 0.25]] # 2
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 2, C3k2, [512, False, 0.25]] # 4: P3 features (stride 8)
+  - [-1, 1, SnakeBlock, [512, 9, 0.1]] # 5: residual snake enhancement of P3, gamma0=0.1 (128ch @ n-scale)
+  - [-1, 1, Conv, [512, 3, 2]] # 6-P4/16
+  - [-1, 2, C3k2, [512, True]] # 7
+  - [-1, 1, Conv, [1024, 3, 2]] # 8-P5/32
+  - [-1, 2, C3k2, [1024, True]] # 9
+  - [-1, 1, SPPF, [1024, 5]] # 10
+  - [-1, 2, C2PSA, [1024]] # 11
+
+# YOLO11 head (stock topology, indices +1 from S2e) + frequency-gated BiFPN skips
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 12
+  - [[-1, 7], 1, Concat, [1]] # 13: cat backbone P4 (layer 7)
+  - [-1, 2, C3k2, [512, False]] # 14
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 15
+  - [[-1, 5], 1, Concat, [1]] # 16: cat snake-enhanced P3 (layer 5)
+  - [-1, 2, C3k2, [256, False]] # 17 (P3/8-small)
+
+  - [-1, 1, Conv, [256, 3, 2]] # 18
+  - [[-1, 14], 1, Concat, [1]] # 19: cat head P4
+  - [-1, 2, C3k2, [512, False]] # 20 (P4/16-medium)
+
+  - [-1, 1, Conv, [512, 3, 2]] # 21
+  - [[-1, 11], 1, Concat, [1]] # 22: cat head P5
+  - [-1, 2, C3k2, [1024, True]] # 23 (P5/32-large)
+
+  # --- frequency-gated residual BiFPN skip edges (S5 mechanism on the S2e skeleton) ---
+  - [7, 1, Conv, [512, 1, 1]] # 24: P4 backbone skip lateral (channel match)
+  - [-1, 1, FcaGate, [8]] # 25: DCT gate (k=8) on P4 skip (128ch @ n-scale)
+  - [[20, 25], 1, BiFPNAdd, []] # 26: P4 refined = w1*P4_out + w2*FcaGate(skip P4)
+  - [11, 1, Conv, [1024, 1, 1]] # 27: P5 backbone skip lateral (channel match)
+  - [-1, 1, FcaGate, [8]] # 28: DCT gate (k=8) on P5 skip (256ch @ n-scale)
+  - [[23, 28], 1, BiFPNAdd, []] # 29: P5 refined = w1*P5_out + w2*FcaGate(skip P5)
+
+  - [[17, 26, 29], 1, Detect, [nc]] # 30: Detect(P3, P4_refined, P5_refined)
